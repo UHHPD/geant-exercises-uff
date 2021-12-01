@@ -9,30 +9,33 @@ void dEdx()
 
   TH1F* hloss = new TH1F("hloss","; -dE [MeV]",100,0,10);
   TGraph* gdEdx =  new TGraph();
-  double momentum = 1;
-  for(int i = 0 ; i < nev ; ++i) {
-    app->SetPrimaryMomentum(momentum);
-    //hprim->Reset();
-    app->RunMC(1,!i);
-    //get energy deposited in our box
-    double loss = app->depEinNode("/EXPH_1/CALB_1");
-    loss *= 1000; //MeV
-    hloss->Fill(loss);
-    loss = loss / density /length; //MeV g-1 cm2
-    std::cout << "betagamma:" << momentum/mass << "     -dE/dex:" << loss << '\n';
-  }
-  gdEdx->SetPoint(gdEdx->GetN(),momentum/mass,hloss->GetMean() / density /length);
-  std::cout << hloss->GetMean()  / density /length << '\n';
-  TCanvas* c1 = new TCanvas("c1");
-  hloss->Draw();
   TCanvas* c2 = new TCanvas("c2");
-  c2->Clear();
-  c2->cd();
   c2->SetLogx();
   c2->SetLogy();
-  gdEdx->Draw("A*");
-  gdEdx->GetXaxis()->SetTitle("#beta#gamma");
-  gdEdx->GetYaxis()->SetTitle("-dE/dx [MeV g^{-1} cm^{2}]");
-  c2->Modified();
-  c2->Update();
+  for (double betagamma = 0.1; betagamma <= 1000; betagamma *= 2) {
+    double momentum = betagamma * mass;
+    hloss->Reset();
+    for(int i = 0 ; i < nev ; ++i) {
+      app->SetPrimaryMomentum(momentum);
+      //hprim->Reset();
+      app->RunMC(1,!i);
+      //get energy deposited in our box
+      double loss = app->depEinNode("/EXPH_1/CALB_1");
+      loss *= 1000; //MeV
+      hloss->Fill(loss);
+      loss = loss / density /length; //MeV g-1 cm2
+      std::cout << "betagamma:" << momentum/mass << "     -dE/dex:" << loss << '\n';
+     }
+    gdEdx->SetPoint(gdEdx->GetN(),momentum/mass,hloss->GetMean() / density /length);
+    std::cout << hloss->GetMean()  / density /length << '\n';
+    TCanvas* c1 = new TCanvas();
+    hloss->Draw();
+    c2->Clear();
+    c2->cd();
+    gdEdx->Draw("A*");
+    gdEdx->GetXaxis()->SetTitle("#beta#gamma");
+    gdEdx->GetYaxis()->SetTitle("-dE/dx [MeV g^{-1} cm^{2}]");
+    c2->Modified();
+    c2->Update();
+  }
 }
