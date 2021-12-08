@@ -25,6 +25,9 @@ TH1F *hresid2 = new TH1F("hresid2","resid2; z_{hit}-z_{true} [cm]; events",100,-
 TH1F *hresid3 = new TH1F("hresid3","resid3; z_{hit}-z_{true} [cm]; events",100,-0.1,0.1);
 TH1F *hpt = new TH1F("hpt","; p_{T} [GeV]",100,0,10);
 TH1F *hptpull = new TH1F("hptpull","; (p_{T}^{meas} - p_{T}^{true})/#sigma",100,-10,10);
+TH1F *hpull1 = new TH1F("hpull1","pull1; z_{hit}-z_{true} / #sigma_{z} ; events",100,-0.1,0.1);
+TH1F *hpull2 = new TH1F("hpull2","pull2; z_{hit}-z_{true} / #sigma_{z} ; events",100,-0.1,0.1);
+TH1F *hpull3 = new TH1F("hpulld3","pull3; z_{hit}-z_{true} / #sigma_{z} ; events",100,-0.1,0.1);
 
 class Cluster : public TVector3 {
 public:
@@ -142,7 +145,7 @@ unsigned char getSignal(const std::string& n)
   //add noise
   c += gRandom->Gaus(0,3);
   //noise cut
-  int noisecut = 0;
+  int noisecut = 15;
   if( c < noisecut ) return 0;
   if(c > 255) return 255;
   return c;
@@ -253,18 +256,27 @@ int reconstructHitsWeighted(TObjArray* clusters)
   for(int i = 0 ; i < clusters->GetEntriesFast() ; ++i) {
     Cluster* c = (Cluster*)clusters->At(i);
     //compute weithed mean
+    double meanstrip = 0.0;
+    int allsig = 0;
+    double error = 0;
     for(int j = 0 ; j < c->nStrips() ; ++j) {
       int sig = c->signal(j);
+      meanstrip += j * sig;
+      allsig += sig;
+      error += sig * sig;
     }
-    c->SetZ(0);
-    c->setErrZ(0);
+    error = sqrt(error) / allsig;
+    error /= c->pitch()/sqrt(12);
+    meanstrip /= allsig;
+    c->SetZ(c->ZofFirstStrip() + meanstrip * c->pitch());
+    c->setErrZ(error);
   }
   return clusters->GetEntriesFast();
 }
 
 int reconstructHits(TObjArray* clusters) {
-  return reconstructHitsBinary(clusters);
-  //return reconstructHitsWeighted(clusters);
+  //return reconstructHitsBinary(clusters);
+  return reconstructHitsWeighted(clusters);
 }
   
 
@@ -296,13 +308,15 @@ void plotResdiuals(TObjArray* clusters) {
     double x = c->X();
     //fill residual plots; x-position of layers hardcoded!!!
     double zorig = getTrueZ(x);    
-    if(c->layer() == 1)
+    if(c->layer() == 1) {
       hresid1->Fill(zorig-c->Z());
-    else {
-      if(c->layer() == 2)
+      hpull1->Fill((zorig-c->Z())/c->errZ());
+    } else if(c->layer() == 2) {
 	hresid2->Fill(zorig-c->Z());
-      else if(c->layer() == 3)
+        hpull2->Fill((zorig-c->Z())/c->errZ());
+    } else if(c->layer() == 3) {
 	hresid3->Fill(zorig-c->Z());
+        hpull3->Fill((zorig-c->Z())/c->errZ());
     }
   }
 }
@@ -397,7 +411,7 @@ void tracking2()
   bool doFit = false;
 
   // define particle and control parameters of loop   
-  unsigned int nevt = 1;
+  unsigned int nevt = 400;
   double p = 1.0;
   app->SetPrimaryPDG(-13);    // +/-11: PDG code of e+/- 
   /* other PDG codes     22: Photon    +-13: muon   
@@ -441,7 +455,7 @@ void tracking2()
     }
   }
   TCanvas* c = new TCanvas("c");
-  c->Divide(3,2);
+  c->Divide(3,3);
   c->cd(1);
   hlayer1->Draw("hist");
   c->cd(2);
@@ -454,6 +468,12 @@ void tracking2()
   hresid2->Draw();
   c->cd(6);
   hresid3->Draw();
+  c->cd(7);
+  hpull1->Draw();
+  c->cd(8);
+  hpull2->Draw();
+  c->cd(9);
+  hpull3->Draw();
 
   if(doFit) {
     TCanvas* c2 = new TCanvas("c2");
