@@ -64,16 +64,18 @@ private:
 
 class Track {
 public:
-  Track(double R, double x0, double z0) :
-    fR(R), fX0(x0), fZ0(z0),fCov(3) {}
+  Track(double C, double d0, double phi0) :
+    fC(C), fPhi0(phi0), fD0(d0), fCov(3) {}
   
   THelix* helix() const;
   
-  int charge() const { return fR > 0 ? 1 : -1;}
-  double r() const { return std::abs(fR);}
-  double x0() const { return fX0;}
-  double z0() const { return fZ0;}
-  double phi0() const { return 0;}
+  int charge() const { return fC > 0 ? 1 : -1;}
+  double r() const { return std::abs(1/fC);}
+  double x0() const { return - (fD0 + charge() * r()) * sin(fPhi0)-50;}
+  double z0() const { return (fD0 + charge() * r()) * cos(fPhi0);}
+  double phi0() const { return fPhi0;}
+  double d0() const { return fD0;}
+  double curvature() const { return fC;}
   
 
 
@@ -86,9 +88,9 @@ public:
   double cov(int i, int j) const { return fCov(i,j);}
   
   void setParameters(double a, double b, double c) {
-    fR  = a;
-    fX0 = b;
-    fZ0 = c;
+    fC  = a;
+    fPhi0 = b;
+    fD0 = c;
   }
   
   void setCov(int i, int j, double c) { fCov(i,j) = c;}
@@ -112,7 +114,7 @@ public:
   }
 
 private:
-  double fR, fX0, fZ0;
+  double fC, fD0, fPhi0;
   TMatrixDSym fCov;
 };
 
@@ -330,7 +332,7 @@ const std::vector<Cluster*> *gClusters;
 void fcn(Int_t &, Double_t *, Double_t &f, Double_t *par, Int_t) {
   //set new track parameters:
   gTrack->setParameters(par[0],par[1],par[2]);
-  // std::cout << "track: r,x0,z0 = " << gTrack->r() << ", " << gTrack->x0() << ", " << gTrack->z0() << '\n'; 
+  //std::cout << "track: r,x0,z0 = " << gTrack->r() << ", " << gTrack->x0() << ", " << gTrack->z0() << '\n'; 
   double chi2 = 0;
   for(unsigned int i = 0 ; i < gClusters->size() ; ++i) {
     Cluster* c = gClusters->at(i);
@@ -351,18 +353,18 @@ void fcn(Int_t &, Double_t *, Double_t &f, Double_t *par, Int_t) {
 
 
 Track* fitTrack(const std::vector<Cluster*>& clusters) {
-  gTrack = new Track(100,-50,100);
+  gTrack = new Track(0.01,0,0);
   gClusters = &clusters;
   
   TMinuit * minuit = new TMinuit(3);
   
   minuit->SetFCN(&fcn);
-  //minuit->DefineParameter(0,"Curvature",gTrack->curvature(),0.00001,0,0);
-  //minuit->DefineParameter(1,"Phi0",gTrack->phi0(),0.001,0,0);
-  //minuit->DefineParameter(2,"D0",gTrack->d0(),0.1,0,0); 
-  minuit->DefineParameter(0,"R",(gTrack->charge() * gTrack->r()),1,0,0);
-  minuit->DefineParameter(1,"X0",gTrack->x0(),1,0,0);
-  minuit->DefineParameter(2,"Z0",gTrack->z0(),1,0,0);
+  minuit->DefineParameter(0,"Curvature",gTrack->curvature(),0.00001,0,0);
+  minuit->DefineParameter(1,"Phi0",gTrack->phi0(),0.001,0,0);
+  minuit->DefineParameter(2,"D0",gTrack->d0(),0.1,0,0); 
+  //minuit->DefineParameter(0,"R",(gTrack->charge() * gTrack->r()),1,0,0);
+  //minuit->DefineParameter(1,"X0",gTrack->x0(),1,0,0);
+  //minuit->DefineParameter(2,"Z0",gTrack->z0(),1,0,0);
   minuit->SetPrintLevel(1);
   int iret = minuit->Migrad();
   //minuit->PrintResults(1,0);
@@ -397,9 +399,10 @@ void tracking2()
   // position of silicon layers in x   
   double pos1 = -45.0;
   double pos2 = -30.0;
+  //double pos2 = 0.0;
   double pos3 = 45.0; 
   double pitch = 0.0150;
-  double materialLength = 0.05;//length of support structures
+  double materialLength = 0.005;//length of support structures
   double Bfield = 2.0;//magnetic field in T
   TString geom("geometry/tracker2(");
   geom+=pos1; geom.Append(",");
@@ -413,7 +416,7 @@ void tracking2()
   bool doFit = true;
 
   // define particle and control parameters of loop   
-  unsigned int nevt = 500;
+  unsigned int nevt = 1;
   double p = 5.0;
   app->SetPrimaryPDG(-13);    // +/-11: PDG code of e+/- 
   /* other PDG codes     22: Photon    +-13: muon   
@@ -450,6 +453,7 @@ void tracking2()
 	Track *t = fitTrack(clust);
 	if(draw) t->helix()->Draw();
 	hpt->Fill(t->pt());
+	std::cout << "pt, p, ptErr: " << t->pt() << ", " << p << ", " << t->ptErr() << std::endl;
 	hptpull->Fill((t->pt()-p)/t->ptErr());
       } else {
 	std::cout << "Warning: Not enough hits for track fit.\n";
