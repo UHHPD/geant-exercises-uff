@@ -12,6 +12,7 @@
 #include "TMinuit.h"
 #include "TList.h"
 #include "TPad.h"
+#include "TFile.h"
 
 #include <cassert>
 
@@ -28,30 +29,32 @@ TH1F *hptpull = new TH1F("hptpull","; (p_{T}^{meas} - p_{T}^{true})/#sigma",100,
 TH1F *hpull1 = new TH1F("hpull1","pull1; z_{hit}-z_{true} / #sigma_{z} ; events",100,-5,5);
 TH1F *hpull2 = new TH1F("hpull2","pull2; z_{hit}-z_{true} / #sigma_{z} ; events",100,-5,5);
 TH1F *hpull3 = new TH1F("hpulld3","pull3; z_{hit}-z_{true} / #sigma_{z} ; events",100,-5,5);
+TH2I *ptres = new TH2I("ptres", "; P_{t}; #sigma", 56, 0, 55, 1000, 0, 1);
+TH1I *bres  = new TH1I("bres", "; #sigma_{pt}/pt", 1000, 0, 0.5);
 
 class Cluster : public TVector3 {
 public:
   Cluster(double x = 0, double y = 0, double startz = 0, double pitch = 0,unsigned char* strips = 0, 
 	  int nstrips = 0, int layer = 0) : 
-    TVector3(x,y, startz), fStartz(startz), fPitch(pitch), fNstrips(nstrips), fLayer(layer),
-    fErrX(0), fErrY(0), fErrZ(0) {
-    for(int i = 0 ; i < fNstrips ; ++i) {
-      fStrips[i] = strips[i];
-    }
-  } 
-  
-  int nStrips() const { return fNstrips;}
-  unsigned int signal(int istrip) const {return fStrips[istrip];}
-  double  ZofFirstStrip() const { return fStartz;}
-  double pitch() const { return fPitch;}
-  int layer() const {return fLayer;}
-
-  double errX() const {return fErrX;}
-  void setErrX(double ex) { fErrX = ex;} 
-  double errY() const {return fErrY;}
-  void setErrY(double ey) { fErrY = ey;} 
-  double errZ() const {return fErrZ;}
-  void setErrZ(double ez) { fErrZ = ez;} 
+	  TVector3(x,y, startz), fStartz(startz), fPitch(pitch), fNstrips(nstrips), fLayer(layer),
+	  fErrX(0), fErrY(0), fErrZ(0) {
+	    for(int i = 0 ; i < fNstrips ; ++i) {
+	      fStrips[i] = strips[i];
+	    }
+	  } 
+	  
+	  int nStrips() const { return fNstrips;}
+	  unsigned int signal(int istrip) const {return fStrips[istrip];}
+	  double  ZofFirstStrip() const { return fStartz;}
+	  double pitch() const { return fPitch;}
+	  int layer() const {return fLayer;}
+	  
+	  double errX() const {return fErrX;}
+	  void setErrX(double ex) { fErrX = ex;} 
+	  double errY() const {return fErrY;}
+	  void setErrY(double ey) { fErrY = ey;} 
+	  double errZ() const {return fErrZ;}
+	  void setErrZ(double ez) { fErrZ = ez;} 
 private:
   double fStartz;
   double fPitch;
@@ -65,7 +68,7 @@ private:
 class Track {
 public:
   Track(double C, double d0, double phi0) :
-    fC(C), fPhi0(phi0), fD0(d0), fCov(3) {}
+  fC(C), fPhi0(phi0), fD0(d0), fCov(3) {}
   
   THelix* helix() const;
   
@@ -77,14 +80,14 @@ public:
   double d0() const { return fD0;}
   double curvature() const { return fC;}
   
-
-
+  
+  
   double pt() const { return charge() * r() * B() * 0.003;}//needs changes
-
-  double rErr() const { return sqrt(fCov(0,0));}
+  
+  double rErr() const { return sqrt(fCov(0,0)) / (fC * fC);}
   double ptErr() const { return pt()*rErr()/r();}//needs changes
-
-
+  
+  
   double cov(int i, int j) const { return fCov(i,j);}
   
   void setParameters(double a, double b, double c) {
@@ -104,7 +107,7 @@ public:
     double lambda = (asin(arg) - phi0()) / charge();
     return lambda;
   }
-
+  
   static double B() {
     TutorialApplication* app = (TutorialApplication*)TutorialApplication::Instance();
     double x[]={0,0,0};
@@ -112,7 +115,7 @@ public:
     app->Field(x,bfield);
     return bfield[1]/10;
   }
-
+  
 private:
   double fC, fD0, fPhi0;
   TMatrixDSym fCov;
@@ -172,8 +175,8 @@ int updateClusters(TObjArray* clusters)
     hcurrent = 0;
     if(i == 0) hcurrent = hlayer1;
     if(i == 1) hcurrent = hlayer2;
-
-
+    
+    
     if(i == 2) hcurrent = hlayer3;
     //gGeoManager->GetCurrentNode()->Print();
     gGeoManager->CdDown(i);
@@ -185,37 +188,37 @@ int updateClusters(TObjArray* clusters)
       if(! name.BeginsWith("SiLayer")) { gGeoManager->CdUp(); continue;}
       //loop over strips
       for(int k = 0, mk = gGeoManager->GetCurrentNode()->GetNdaughters(); k < mk ; ++k) {
-        gGeoManager->CdDown(k);
-        TString name2(gGeoManager->GetCurrentNode()->GetName());
-        assert(name2.BeginsWith("Strip"));
-        //gGeoManager->GetCurrentNode()->Print();
-        strips[0] = getSignal(gGeoManager->GetPath());
-        if(strips[0]) {
+	gGeoManager->CdDown(k);
+	TString name2(gGeoManager->GetCurrentNode()->GetName());
+	assert(name2.BeginsWith("Strip"));
+	//gGeoManager->GetCurrentNode()->Print();
+	strips[0] = getSignal(gGeoManager->GetPath());
+	if(strips[0]) {
 	  //std::cout << "strip with signal:" << gGeoManager->GetPath() << ":" << strips[0] << '\n';
-          int nstrips = 0;
+	  int nstrips = 0;
 	  double zmin,zmax;
-          gGeoManager->GetCurrentVolume()->GetShape()->GetAxisRange(3,zmin,zmax);
-          double pitch = zmax-zmin;
-          double local[3]={0,0,0};
-          double pos[3]={0,0,0};
-          gGeoManager->LocalToMaster(local,pos);
-          //std::cout << gGeoManager->GetCurrentNavigator()->GetPath() << " Node:" << gGeoManager->GetCurrentNodeId() << ", " << gGeoManager->GetCurrentNode() << '\n';
-          //std::cout << pos[0] << "," << pos[1] << ", " << pos[2]  << ":" << (int)strips[0] << '\n';
-          if(hcurrent) hcurrent->Fill(pos[2],strips[0]);
-          for(nstrips = 1 ; nstrips < 10 ; ++nstrips) { 
-            gGeoManager->CdUp();
-            if(k+nstrips >= gGeoManager->GetCurrentNode()->GetNdaughters()) {gGeoManager->CdDown(k); break;}
-            gGeoManager->CdDown(k+nstrips);
-            //std::cout << gGeoManager->GetPath() << std::endl;
-            strips[nstrips] = getSignal(gGeoManager->GetPath());
-            if(! strips[nstrips]) break;
-            if(hcurrent) hcurrent->Fill(pos[2]+nstrips*pitch,strips[nstrips]);
-          }
-          //std::cout << "cluster:" << pos[0] << "," << pos[1] << ", " << pos[2]  << ":" << (int)strips[0] << ", " << (int)strips[0]+(int)strips[1] << " nstrips = " << nstrips << '\n';
-          clusters->Add(new Cluster(pos[0],pos[1],pos[2],pitch,strips,nstrips,i+1));
-          k+= nstrips;
-        }//strip with charge
-        gGeoManager->CdUp();
+	  gGeoManager->GetCurrentVolume()->GetShape()->GetAxisRange(3,zmin,zmax);
+	  double pitch = zmax-zmin;
+	  double local[3]={0,0,0};
+	  double pos[3]={0,0,0};
+	  gGeoManager->LocalToMaster(local,pos);
+	  //std::cout << gGeoManager->GetCurrentNavigator()->GetPath() << " Node:" << gGeoManager->GetCurrentNodeId() << ", " << gGeoManager->GetCurrentNode() << '\n';
+	  //std::cout << pos[0] << "," << pos[1] << ", " << pos[2]  << ":" << (int)strips[0] << '\n';
+	  if(hcurrent) hcurrent->Fill(pos[2],strips[0]);
+	  for(nstrips = 1 ; nstrips < 10 ; ++nstrips) { 
+	    gGeoManager->CdUp();
+	    if(k+nstrips >= gGeoManager->GetCurrentNode()->GetNdaughters()) {gGeoManager->CdDown(k); break;}
+	    gGeoManager->CdDown(k+nstrips);
+	    //std::cout << gGeoManager->GetPath() << std::endl;
+	    strips[nstrips] = getSignal(gGeoManager->GetPath());
+	    if(! strips[nstrips]) break;
+	    if(hcurrent) hcurrent->Fill(pos[2]+nstrips*pitch,strips[nstrips]);
+	  }
+	  //std::cout << "cluster:" << pos[0] << "," << pos[1] << ", " << pos[2]  << ":" << (int)strips[0] << ", " << (int)strips[0]+(int)strips[1] << " nstrips = " << nstrips << '\n';
+	  clusters->Add(new Cluster(pos[0],pos[1],pos[2],pitch,strips,nstrips,i+1));
+	  k+= nstrips;
+	}//strip with charge
+	gGeoManager->CdUp();
       }//loop within silayer
       gGeoManager->CdUp();
     }//loop within layer
@@ -282,7 +285,7 @@ int reconstructHits(TObjArray* clusters) {
   //return reconstructHitsBinary(clusters);
   return reconstructHitsWeighted(clusters);
 }
-  
+
 
 double getTrueZ(double detx) {
   //get primary track
@@ -316,11 +319,11 @@ void plotResdiuals(TObjArray* clusters) {
       hresid1->Fill(zorig-c->Z());
       hpull1->Fill((zorig-c->Z())/c->errZ());
     } else if(c->layer() == 2) {
-	hresid2->Fill(zorig-c->Z());
-        hpull2->Fill((zorig-c->Z())/c->errZ());
+      hresid2->Fill(zorig-c->Z());
+      hpull2->Fill((zorig-c->Z())/c->errZ());
     } else if(c->layer() == 3) {
-	hresid3->Fill(zorig-c->Z());
-        hpull3->Fill((zorig-c->Z())/c->errZ());
+      hresid3->Fill(zorig-c->Z());
+      hpull3->Fill((zorig-c->Z())/c->errZ());
     }
   }
 }
@@ -395,70 +398,86 @@ void removeAllHelices(TVirtualPad* pad) {
 
 void tracking2()
 {
-  TutorialApplication* app = (TutorialApplication*)TutorialApplication::Instance();
+  bool doFit = true;
+  double len = 90.0 * 3/4;
   // position of silicon layers in x   
   double pos1 = -45.0;
-  double pos2 = -30.0;
-  //double pos2 = 0.0;
-  double pos3 = 45.0; 
+  //double pos2 = -30.0;
+  double pos2 = pos1 + len/2;
+  double pos3 = pos1 + len; 
   double pitch = 0.0150;
   double materialLength = 0.005;//length of support structures
-  double Bfield = 2.0;//magnetic field in T
-  TString geom("geometry/tracker2(");
-  geom+=pos1; geom.Append(",");
-  geom+=pos2; geom.Append(",");
-  geom+=pos3; geom.Append(",");
-  geom+=pitch; geom.Append(",");
-  geom+=materialLength; geom.Append(",");
-  geom+=Bfield; geom.Append(")"); 
-  app->InitMC(geom); 
-
-  bool doFit = true;
-
-  // define particle and control parameters of loop   
-  unsigned int nevt = 1;
-  double p = 5.0;
-  app->SetPrimaryPDG(-13);    // +/-11: PDG code of e+/- 
-  /* other PDG codes     22: Photon    +-13: muon   
-                     +/-211: pion   +/-2212: proton     */
-  app->SetPrimaryMomentum(p);
-  // generate  some events
-  hresid1->Reset();
-  hresid2->Reset();
-  hresid3->Reset();
-  hpt->Reset();
-  hptpull->Reset(); 
-  TObjArray* clusters = new TObjArray();
-  clusters->SetOwner(true);
-  for(unsigned int i=0;i<nevt;++i) {
-    bool draw = !i;
-    double z = gRandom->Uniform(-5.0,5.0);
-    app->SetPrimaryVertex(-50,0,z);
-    double phi = gRandom->Uniform(TMath::Pi()/2-0.1,TMath::Pi()/2+0.1);
-    TVector3 dir;
-    dir.SetPtThetaPhi(p,phi,0);
-    app->SetPrimaryMomentum(dir);
-    removeAllHelices(app->GetDrawPad());
-    app->RunMC(1, draw);
-    updateClusters(clusters);
-    reconstructHits(clusters);
-    plotResdiuals(clusters);
-    if(doFit) {
-      if(clusters->GetEntriesFast() >= 3) {
-	std::vector<Cluster*> clust;
-	for(int i = 0 ; i < clusters->GetEntriesFast() ; ++i) {
-	  Cluster* c = (Cluster*)clusters->At(i);
-	  clust.push_back(c);
-	}	
-	Track *t = fitTrack(clust);
-	if(draw) t->helix()->Draw();
-	hpt->Fill(t->pt());
-	std::cout << "pt, p, ptErr: " << t->pt() << ", " << p << ", " << t->ptErr() << std::endl;
-	hptpull->Fill((t->pt()-p)/t->ptErr());
-      } else {
-	std::cout << "Warning: Not enough hits for track fit.\n";
+  //double Bfield = 2.0;//magnetic field in T
+  const unsigned int nB = 1;
+  double B[nB] = {2.0};
+  for (unsigned int j = 0; j < nB; j++) {
+    TutorialApplication* app = (TutorialApplication*)TutorialApplication::Instance();
+    double Bfield = B[j];
+    TString geom("geometry/tracker2(");
+    geom+=pos1; geom.Append(",");
+    geom+=pos2; geom.Append(",");
+    geom+=pos3; geom.Append(",");
+    geom+=pitch; geom.Append(",");
+    geom+=materialLength; geom.Append(",");
+    geom+=Bfield; geom.Append(")"); 
+    app->InitMC(geom); 
+    
+    
+    //const unsigned int nP = 5; 
+    //double P[nP] = {1.0, 5.0, 10.0, 25.0, 50.0};
+    const unsigned int nP = 1; 
+    double P[nP] = {5.0};
+    for (unsigned int k = 0; k < nP; k++) {  
+      // define particle and control parameters of loop   
+      unsigned int nevt = 500;
+      //double p = 5.0;
+      double p = P[k];
+      app->SetPrimaryPDG(-13);    // +/-11: PDG code of e+/- 
+      /* other PDG codes     22: Photon    +-13: muon   
+       *                     +/-211: pion   +/-2212: proton     */
+      app->SetPrimaryMomentum(p);
+      // generate  some events
+      hresid1->Reset();
+      hresid2->Reset();
+      hresid3->Reset();
+      hpt->Reset();
+      hptpull->Reset(); 
+      TObjArray* clusters = new TObjArray();
+      clusters->SetOwner(true);
+      for(unsigned int i=0;i<nevt;++i) {
+	bool draw = !i;
+	double z = gRandom->Uniform(-5.0,5.0);
+	app->SetPrimaryVertex(-50,0,z);
+	double phi = gRandom->Uniform(TMath::Pi()/2-0.1,TMath::Pi()/2+0.1);
+	TVector3 dir;
+	dir.SetPtThetaPhi(p,phi,0);
+	app->SetPrimaryMomentum(dir);
+	removeAllHelices(app->GetDrawPad());
+	app->RunMC(1, draw);
+	updateClusters(clusters);
+	reconstructHits(clusters);
+	plotResdiuals(clusters);
+	if(doFit) {
+	  if(clusters->GetEntriesFast() >= 3) {
+	    std::vector<Cluster*> clust;
+	    for(int i = 0 ; i < clusters->GetEntriesFast() ; ++i) {
+	      Cluster* c = (Cluster*)clusters->At(i);
+	      clust.push_back(c);
+	    }	
+	    Track *t = fitTrack(clust);
+	    if(draw) t->helix()->Draw();
+	    hpt->Fill(t->pt());
+	    std::cout << "pt, p, ptErr: " << t->pt() << ", " << p << ", " << t->ptErr() << std::endl;
+	    hptpull->Fill((t->pt()-p)/t->ptErr());
+	    ptres->Fill(p, t->ptErr()/p);
+	    bres->Fill(t->ptErr()/p);
+	  } else {
+	    std::cout << "Warning: Not enough hits for track fit.\n";
+	  }
+	}
       }
     }
+    app->FinishRun();
   }
   TCanvas* c = new TCanvas("c");
   c->Divide(3,3);
@@ -480,7 +499,7 @@ void tracking2()
   hpull2->Draw();
   c->cd(9);
   hpull3->Draw();
-
+  
   if(doFit) {
     TCanvas* c2 = new TCanvas("c2");
     c2->Divide(2,1);
@@ -488,5 +507,12 @@ void tracking2()
     hpt->Draw();
     c2->cd(2);
     hptpull->Draw();
+    TCanvas* c3 = new TCanvas("c3");
+    TFile outfile = TFile("7_3.root", "RECREATE");
+    // hahaha
+    //ptres->Draw("candle");
+    ptres->Write();
+    bres->Draw();
+    outfile.Close();
   }
 }
