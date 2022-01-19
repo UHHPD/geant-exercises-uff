@@ -69,7 +69,8 @@ void CaloAna()
 // initialize geometry: volumes and materials of a Sampling Calorimeter   
   Double_t AbsWid=2.;         //Absorber width
   Double_t SciWid=1.;         //Scintillator width, 
-  Double_t SizeFact=0.7;      //size of the calorimeter in interaction lengths labmda_I, 4.
+  Double_t SizeFact=7.0;      //size of the calorimeter in interaction lengths labmda_I, 4.
+  //Double_t SizeFact=0.7;      //size of the calorimeter in interaction lengths labmda_I, 4.
   Int_t IMat=1;               //material 1:Pb 2:Fe 
   TString geom("geometry/SamplingCalorimeter(");
   geom+=AbsWid; geom.Append(",");
@@ -97,16 +98,17 @@ void CaloAna()
   hcounts->SetXTitle("energy [GeV]");
   hcounts->SetYTitle("mean number of counts");
   TH2D* hresponse = new TH2D("hresponse","measured energy/particle energy vs particle energy; energy [GeV]; response",
-			     20,0.,10.,50,0,2);
+			     10,0.,10.,50,0,2);
 
 //simulate events at fixed momentum
   TH1F* hhelp; // for analysis of internal histograms
   Double_t xp[1]={0.90},xq[1];
 
-  unsigned int nevt = 100;
+  unsigned int nevt = 1;
   double       p = 3;//GeV
 
-  app->SetPrimaryPDG(-11); 
+  int pdg = -211;
+  app->SetPrimaryPDG(pdg); 
   /* PDG codes     22: Photon    +/-11: e+/-  +-13: muon   
                +/-211: pion    +/-2212: proton              */
   app->SetPrimaryMomentum(p);
@@ -128,14 +130,17 @@ void CaloAna()
     app->FinishRun();
   }
   
+  // assume pion if not electron
+  double calFactor = pdg == 11 ? 1.0/14.54 : 1.0/75.58;
   // events at different momenta
-  nevt = 100; p = 0.1;
+  nevt = 1000; p = 0.1;
   double stepping = 9.9 / nevt;
   // generate a large number of events
   for(unsigned int i=0;i<nevt;++i) {
     app->SetPrimaryMomentum(p);
     app->RunMC(1,!(i%10));
     hcounts->Fill(p,CountChargedinScint());
+    hresponse->Fill(p, CountChargedinScint() * calFactor / p);
     p += stepping;
     
     // reset internal histograms
@@ -148,4 +153,8 @@ void CaloAna()
   c->cd(2);  hwidth->Draw();
   c->cd(3);  hlength->Draw();
   c->cd(4);  hcounts->Draw();
+  TCanvas* c2 = new TCanvas();
+  hresponse->FitSlicesY();
+  TH1D* hsigmas = (TH1D*)gROOT->FindObject("hresponse_2");
+  hsigmas->Draw();
 }
